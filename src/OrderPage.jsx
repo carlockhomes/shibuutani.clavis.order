@@ -172,6 +172,9 @@ export default function OrderPage() {
     try {
       // [v3.17 H-11] 送信前に Turnstile token を取得
       const turnstileToken = await getTurnstileToken()
+      // 2026-05-05 CRITICAL fix D: items を配列のまま送信（GAS 側 Array.isArray 検証通過のため）
+      //   旧: JSON.stringify(items) で送信 → GAS の Array.isArray が false → バリデーション bypass
+      //   新: 配列のまま送信 → GAS でサーバー側再計算 + price<=0 検証が動作
       await submitOrder({
         status:   'inquiry',
         maker:    'シブタニ',
@@ -181,7 +184,7 @@ export default function OrderPage() {
         phone:    form.phone,
         work:     cartSummary(),
         amount:   totalPrice(),
-        items:    JSON.stringify(items),
+        items:    items,
         note:     form.note,
         passCode: passInput.trim(),
         createdAt: new Date().toISOString(),

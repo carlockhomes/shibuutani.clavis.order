@@ -171,6 +171,14 @@ function getAuditLogSheet_() {
 }
 
 function auditLog(action, actor, detail) {
+  // 2026-05-05: LockService で並行書き込み時のハッシュチェーン破損を防止
+  var __auditLock = LockService.getScriptLock();
+  var __auditLockAcquired = false;
+  try { __auditLockAcquired = __auditLock.tryLock(5000); } catch(_e) { __auditLockAcquired = false; }
+  if (!__auditLockAcquired) {
+    console.error('shibutani auditLog: lock timeout, action=' + action);
+    return;
+  }
   try {
     var sh = getAuditLogSheet_();
     if (!sh) return;
@@ -205,6 +213,8 @@ function auditLog(action, actor, detail) {
     sh.appendRow([ts, action, actorEmail, actorRole, targetId, maskedDetail, prevHash, currentHash]);
   } catch(e) {
     console.error('auditLog error:', e && e.message);
+  } finally {
+    try { __auditLock.releaseLock(); } catch(_re) {}
   }
 }
 
@@ -587,13 +597,14 @@ function searchBukken_(body) {
         if (typeof av === 'number' && typeof bv === 'number') return asc ? av - bv : bv - av;
         return asc ? String(av).localeCompare(String(bv), 'ja') : String(bv).localeCompare(String(av), 'ja');
       };
+      // 2026-05-05 fix: schema 実フィールド名と一致させる ('物件id' → 'buken_id', '戸数' → '住戸数')
       switch (sortKey) {
-        case 'id_desc':    filtered.sort(function(a,b){ return _cmp(a,b,'物件id', false); }); break;
-        case 'id_asc':     filtered.sort(function(a,b){ return _cmp(a,b,'物件id', true);  }); break;
-        case 'name_asc':   filtered.sort(function(a,b){ return _cmp(a,b,'物件名', true);  }); break;
-        case 'units_desc': filtered.sort(function(a,b){ return _cmp(a,b,'戸数',   false); }); break;
-        case 'year_desc':  filtered.sort(function(a,b){ return _cmp(a,b,'竣工年', false); }); break;
-        case 'year_asc':   filtered.sort(function(a,b){ return _cmp(a,b,'竣工年', true);  }); break;
+        case 'id_desc':    filtered.sort(function(a,b){ return _cmp(a,b,'buken_id', false); }); break;
+        case 'id_asc':     filtered.sort(function(a,b){ return _cmp(a,b,'buken_id', true);  }); break;
+        case 'name_asc':   filtered.sort(function(a,b){ return _cmp(a,b,'物件名',   true);  }); break;
+        case 'units_desc': filtered.sort(function(a,b){ return _cmp(a,b,'住戸数',   false); }); break;
+        case 'year_desc':  filtered.sort(function(a,b){ return _cmp(a,b,'竣工年',   false); }); break;
+        case 'year_asc':   filtered.sort(function(a,b){ return _cmp(a,b,'竣工年',   true);  }); break;
       }
     }
 
